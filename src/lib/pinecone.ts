@@ -1,14 +1,16 @@
 import { Pinecone, PineconeRecord } from "@pinecone-database/pinecone";
 import { downloadFromS3 } from "./s3-server";
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+// import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import {
   Document,
   RecursiveCharacterTextSplitter,
 } from "@pinecone-database/doc-splitter";
 import { getEmbeddings } from "./embeddings";
+import fs from "fs/promises";
 let pinecone: Pinecone | undefined;
 import md5 from "md5";
 import { convertToAscii } from "./utils";
+import { getDocumentLoader, isAllowedFileExtension } from "./fileTypes";
 
 export const getPineconeClient = async (): Promise<Pinecone> => {
   if (!pinecone) {
@@ -19,39 +21,52 @@ export const getPineconeClient = async (): Promise<Pinecone> => {
   return pinecone;
 };
 
-type PDFPage = {
+type Page = {
   pageContent: string;
-  metadata: {
-    loc: { pageNumber: number };
-  };
+  metadata: any; // Each loader has different metadata structure
 };
 
 export async function loadS3IntoPinecone(file_key: string) {
   console.log("downloading s3 file into filesystem");
-  const file_name = await downloadFromS3(file_key);
+  const result = await downloadFromS3(file_key);
 
-  if (!file_name) {
+  if (!result || !result.file_name) {
     throw new Error("Failed to download file from S3");
   }
 
-  const loader = new PDFLoader(file_name);
-  const pages = (await loader.load()) as PDFPage[];
+  // Add type guard for supported file types
+  if (!isAllowedFileExtension(result.extension)) {
+    throw new Error(`Unsupported file type: ${result.extension}`);
+  }
 
-  //2. split and segmet pdf into documents
+  try {
+    const loader = getDocumentLoader(result.extension, result.file_name);
+    const pages = (await loader.load()) as Page[];
+    console.log("pages", pages);
+    // Clean up the temporary file after loading
+    await fs.unlink(result.file_name);
 
-  const documents = await Promise.all(pages.map(prepareDocument));
+    //2. split and segment into documents
+    const documents = await Promise.all(
+      pages.map((page, index) => prepareDocument(page, index + 1))
+    );
 
-  //3. vectorize and embed individual documents
-  const vectors = await Promise.all(documents.flat().map(embedDocument));
+    //3. vectorize and embed individual documents
+    const vectors = await Promise.all(documents.flat().map(embedDocument));
 
-  //4. upload to pinecone
-  const client = await getPineconeClient();
+    //4. upload to pinecone
+    const client = await getPineconeClient();
 
-  const namespace = convertToAscii(file_key);
-  const pineconeIndex = client.index("chatpdf-yt").namespace(namespace);
-  await pineconeIndex.upsert(vectors);
+    const namespace = convertToAscii(file_key);
+    const pineconeIndex = client.index("chatpdf-yt").namespace(namespace);
+    await pineconeIndex.upsert(vectors);
 
-  return documents[0];
+    return documents[0];
+  } catch (error) {
+    // Make sure we still clean up even if processing fails
+    await fs.unlink(result.file_name).catch(console.error);
+    throw error;
+  }
 }
 
 async function embedDocument(doc: Document) {
@@ -63,7 +78,7 @@ async function embedDocument(doc: Document) {
       id: hash,
       values: embeddings,
       metadata: {
-        text: doc.metadata.text,
+        text: doc.pageContent,
         pageNumber: doc.metadata.pageNumber,
       },
     } as PineconeRecord;
@@ -73,20 +88,19 @@ async function embedDocument(doc: Document) {
   }
 }
 
-export const truncateStringByBytes = (str: string, bytes: number) => {
-  const enc = new TextEncoder();
-  return new TextDecoder("utf-8").decode(enc.encode(str).slice(0, bytes));
-};
-async function prepareDocument(page: PDFPage) {
+async function prepareDocument(page: Page, fallbackPageNumber: number) {
   const { pageContent, metadata } = page;
-  pageContent.replace(/\n/g, "");
+  const cleanContent = pageContent.replace(/\n/g, "");
+
+  // Extract page number from metadata if available, otherwise use fallback
+  const pageNumber = metadata?.loc?.pageNumber || fallbackPageNumber;
+
   const splitter = new RecursiveCharacterTextSplitter();
   const docs = await splitter.splitDocuments([
     new Document({
-      pageContent,
+      pageContent: cleanContent,
       metadata: {
-        pageNumber: metadata.loc.pageNumber,
-        text: truncateStringByBytes(pageContent, 36000),
+        pageNumber,
       },
     }),
   ]);

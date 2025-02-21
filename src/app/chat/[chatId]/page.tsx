@@ -26,6 +26,7 @@ const ChatPage = async ({ params }: Props) => {
     redirect("/");
   }
   const currentChat = _chats.find((chat) => chat.id === parseInt(chatId));
+  console.log(currentChat);
   if (!currentChat) {
     console.log("no current chat");
     return redirect("/");
@@ -39,7 +40,7 @@ const ChatPage = async ({ params }: Props) => {
         </div>
         <div className="flex-[5] max-h-screen p-2 overflow-auto bg-slate-50">
           <div className="rounded-lg overflow-hidden shadow-md h-full">
-            <PDFViewer pdf_url={currentChat?.pdfUrl || ""} />
+            <PDFViewer file_url={currentChat?.fileUrl || ""} />
           </div>
         </div>
         <div className="flex-[3] border-l border-slate-200 bg-slate-50">

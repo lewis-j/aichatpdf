@@ -1,6 +1,11 @@
 import AWS from "aws-sdk";
 import fs from "fs";
 import path from "path";
+import {
+  contentTypeToExtension,
+  FileContentType,
+  FileExtension,
+} from "./fileTypes";
 
 // Create temp directory if it doesn't exist
 const tempDir = path.join(process.cwd(), "temp");
@@ -8,7 +13,9 @@ if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir);
 }
 
-export async function downloadFromS3(file_key: string) {
+export async function downloadFromS3(
+  file_key: string
+): Promise<{ file_name: string; extension: FileExtension } | null> {
   try {
     AWS.config.update({
       accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_ID,
@@ -25,9 +32,13 @@ export async function downloadFromS3(file_key: string) {
       Key: file_key,
     };
     const obj = await s3.getObject(params).promise();
-    const file_name = path.join(tempDir, `pdf-${Date.now()}.pdf`);
+
+    const contentType = obj.ContentType!;
+    const extension = contentTypeToExtension(contentType as FileContentType);
+    const file_name = path.join(tempDir, `file-${Date.now()}${extension}`);
+
     fs.writeFileSync(file_name, obj.Body as Buffer);
-    return file_name;
+    return { file_name, extension };
   } catch (error) {
     console.error(error);
     return null;

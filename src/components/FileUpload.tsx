@@ -7,6 +7,10 @@ import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import {
+  isValidContentType,
+  SUPPORTED_CONTENT_TYPES,
+} from "@/lib/contentTypes";
 
 const FileUpload = () => {
   const router = useRouter();
@@ -28,11 +32,16 @@ const FileUpload = () => {
     },
   });
   const { getRootProps, getInputProps } = useDropzone({
-    accept: { "application/pdf": [".pdf"] },
+    accept: SUPPORTED_CONTENT_TYPES,
     maxFiles: 1,
     onDrop: async (acceptedFiles) => {
-      console.log(acceptedFiles);
       const file = acceptedFiles[0];
+
+      if (!file || !isValidContentType(file)) {
+        alert("Please upload a supported file type");
+        return;
+      }
+
       if (file.size > 10 * 1024 * 1024) {
         toast.error("File too large");
         return;
@@ -82,6 +91,9 @@ const FileUpload = () => {
           <>
             <Inbox className="w-12 h-12 text-blue-500" />
             <p className="mt-3 text-sm text-blue-600">Drop PDF Here</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Supported files: PDF, TXT, CSV, DOCX, JSON, MD
+            </p>
           </>
         )}
       </div>
