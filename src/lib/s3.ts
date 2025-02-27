@@ -1,4 +1,5 @@
 import AWS from "aws-sdk";
+import { ContentType } from "./contentTypes/client";
 
 export async function uploadToS3(file: File) {
   try {
@@ -21,7 +22,9 @@ export async function uploadToS3(file: File) {
       Bucket: process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME!,
       Key: file_key,
       Body: file,
-      ContentType: file.type,
+      // Type assertion for documentation - shows that S3's ContentType
+      // uses the same MIME types defined in our SUPPORTED_CONTENT_TYPES
+      ContentType: file.type as ContentType,
     };
     const upload = s3
       .putObject(params)

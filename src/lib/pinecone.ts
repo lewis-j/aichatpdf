@@ -10,7 +10,7 @@ import fs from "fs/promises";
 let pinecone: Pinecone | undefined;
 import md5 from "md5";
 import { convertToAscii } from "./utils";
-import { getDocumentLoader, isAllowedFileExtension } from "./fileTypes";
+import { createDocumentLoader } from "./contentTypes/server";
 
 export const getPineconeClient = async (): Promise<Pinecone> => {
   if (!pinecone) {
@@ -34,16 +34,11 @@ export async function loadS3IntoPinecone(file_key: string) {
     throw new Error("Failed to download file from S3");
   }
 
-  // Add type guard for supported file types
-  if (!isAllowedFileExtension(result.extension)) {
-    throw new Error(`Unsupported file type: ${result.extension}`);
-  }
-
   try {
-    const loader = getDocumentLoader(result.extension, result.file_name);
+    //use extension to determine the loader
+    const loader = createDocumentLoader(result.extension, result.file_name);
     const pages = (await loader.load()) as Page[];
-    console.log("pages", pages);
-    // Clean up the temporary file after loading
+
     await fs.unlink(result.file_name);
 
     //2. split and segment into documents

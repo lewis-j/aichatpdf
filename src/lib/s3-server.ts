@@ -2,10 +2,10 @@ import AWS from "aws-sdk";
 import fs from "fs";
 import path from "path";
 import {
-  contentTypeToExtension,
-  FileContentType,
   FileExtension,
-} from "./fileTypes";
+  ContentType,
+  getDefaultExtension,
+} from "./contentTypes/client";
 
 // Create temp directory if it doesn't exist
 const tempDir = path.join(process.cwd(), "temp");
@@ -31,13 +31,19 @@ export async function downloadFromS3(
       Bucket: process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME!,
       Key: file_key,
     };
-    const obj = await s3.getObject(params).promise();
 
-    const contentType = obj.ContentType!;
-    const extension = contentTypeToExtension(contentType as FileContentType);
+    const headObject = await s3.headObject(params).promise();
+    const contentType = headObject.ContentType!;
+    // Get the corresponding file extension for this content type (e.g., '.pdf' for 'application/pdf')
+    const extension = getDefaultExtension(contentType as ContentType);
     const file_name = path.join(tempDir, `file-${Date.now()}${extension}`);
 
-    fs.writeFileSync(file_name, obj.Body as Buffer);
+    const fileStream = fs.createWriteStream(file_name);
+    const s3Stream = s3.getObject(params).createReadStream();
+    await new Promise((resolve, reject) => {
+      s3Stream.pipe(fileStream).on("error", reject).on("finish", resolve);
+    });
+
     return { file_name, extension };
   } catch (error) {
     console.error(error);

@@ -25,7 +25,7 @@ export default async function Home() {
     <div className="min-h-screen bg-gradient-to-r from-slate-100 from-10% via-indigo-300 via-50% to-slate-100 to-90% animate-gradient-x flex items-center justify-center">
       <div className="flex flex-col items-center text-center space-y-4">
         <div className="flex items-center space-x-3">
-          <h1 className="text-5xl font-semibold">Chat with your PDF</h1>
+          <h1 className="text-5xl font-semibold">Chat with your Files</h1>
           <UserButton afterSwitchSessionUrl="/" />
         </div>
         <div className="flex mt-2">
